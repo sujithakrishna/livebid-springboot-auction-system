@@ -1,7 +1,7 @@
 # 🔨 LiveBid — Online Auction System
 
 <p align="center">
-  <strong>A Java-based online auction backend with secure authentication, competitive bidding, automatic bidding, and real-time auction lifecycle management.</strong>
+  <strong>A Java 21 and Spring Boot backend for secure online auctions, concurrent bidding, automatic bidding, and auction lifecycle management.</strong>
 </p>
 
 <p align="center">
@@ -25,17 +25,17 @@
 
 ## 📌 Overview
 
-**LiveBid** is a backend application for managing online auctions. It provides authenticated users with APIs to browse auctions, place bids, configure automatic bidding, and retrieve notifications.
+**LiveBid** is a backend application for managing online auctions. It exposes REST APIs that allow authenticated users to browse auctions, create auctions, place bids, configure automatic bidding, and retrieve notifications.
 
-The system also handles auction lifecycle transitions and uses optimistic locking to help prevent conflicting updates during concurrent bidding.
+The application uses JWT-based authentication to protect endpoints and optimistic locking to detect conflicting updates when multiple users compete to place bids. A scheduled service manages auction lifecycle transitions and winner notifications.
 
 ### 🎯 Project Objectives
 
-- Build a structured Java backend for an online auction platform.
-- Implement secure, token-based authentication.
-- Maintain bid consistency when multiple users compete.
-- Automate bidding within user-defined limits.
-- Manage auction closure and winner notifications.
+- Develop a modular Java backend for an online auction platform.
+- Implement authenticated access using JWT.
+- Maintain auction consistency during concurrent bidding.
+- Support automatic bidding within user-defined limits.
+- Automate auction lifecycle transitions and notifications.
 
 ## ✨ Features
 
@@ -45,17 +45,16 @@ The system also handles auction lifecycle transitions and uses optimistic lockin
 - User registration and login APIs.
 - JWT-based authentication for protected endpoints.
 - Password hashing using BCrypt.
-- Authenticated requests for user-specific operations.
+- User-specific operations based on the authenticated identity.
 
 </details>
 
 <details>
 <summary><strong>🔨 Auction Management</strong></summary>
 
-- Retrieve the list of auctions.
-- Retrieve an individual auction by ID.
+- Retrieve all auctions and individual auction details.
 - Create auctions.
-- Track the auction's current highest bid and bidder.
+- Track the current highest bid and bidder.
 - Manage scheduled, live, and closed auction states.
 
 </details>
@@ -64,11 +63,11 @@ The system also handles auction lifecycle transitions and uses optimistic lockin
 <summary><strong>💰 Bidding and Concurrency</strong></summary>
 
 - Submit bids against an auction.
-- Retrieve an auction's bid history.
-- Track the highest bid.
-- Use optimistic locking to detect conflicting concurrent updates.
+- Retrieve bid history.
+- Track the current highest bid.
+- Use optimistic locking to detect concurrent update conflicts.
 
-**Why concurrency matters:** When multiple users attempt to bid simultaneously, the backend must protect the auction's current state from conflicting updates.
+**Why this matters:** Concurrent bidding introduces a race condition when multiple requests attempt to update the same auction. Optimistic locking helps detect conflicting updates and protects data consistency.
 
 </details>
 
@@ -76,9 +75,9 @@ The system also handles auction lifecycle transitions and uses optimistic lockin
 <summary><strong>🤖 Automatic Bidding</strong></summary>
 
 - Configure an automatic bidding limit.
-- Allow the system to submit eligible bids on behalf of a user.
-- Deactivate a user's automatic bidding configuration.
-- Track whether a bid was placed manually or automatically.
+- Submit eligible bids on behalf of a user.
+- Deactivate an automatic bidding configuration.
+- Identify automatically placed bids.
 
 </details>
 
@@ -92,14 +91,31 @@ The system also handles auction lifecycle transitions and uses optimistic lockin
 
 </details>
 
+## 🛠️ Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Java 21 | Core programming language |
+| Spring Boot | Backend application framework |
+| Spring Security | Endpoint security |
+| JWT | Token-based authentication |
+| BCrypt | Password hashing |
+| MySQL | Relational database |
+| Spring Data JPA / JDBC | Persistence and database access, as implemented |
+| Maven | Dependency management and build |
+| Postman | API testing |
+| IntelliJ IDEA | Development environment |
+
 ## 🏗️ Architecture
+
+The application separates request handling, business logic, database access, authentication, and domain models into distinct packages.
 
 ```mermaid
 flowchart TD
     A[Client / Postman] --> B[REST API]
-    B --> C[JWT Authentication]
-    C --> D[Spring Boot Controllers]
-    D --> E[Business Services]
+    B --> C[JWT Authentication Filter]
+    C --> D[Controllers]
+    D --> E[Services]
     E --> F[Auction Management]
     E --> G[Bidding and Auto-Bidding]
     E --> H[Notification Management]
@@ -109,22 +125,7 @@ flowchart TD
     J[Scheduled Auction Lifecycle] --> E
 ```
 
-### Technology Stack
-
-| Technology | Purpose |
-|---|---|
-| Java 21 | Core programming language |
-| Spring Boot | Backend application framework |
-| Spring Security | Endpoint protection |
-| JWT | Token-based authentication |
-| BCrypt | Password hashing |
-| MySQL | Relational database |
-| Spring Data JPA | Database persistence |
-| JDBC | Database access where implemented |
-| Postman | API testing |
-| IntelliJ IDEA | Development environment |
-
-## 🔄 How Bidding Works
+### 🔄 Concurrent Bidding Workflow
 
 ```mermaid
 sequenceDiagram
@@ -135,80 +136,60 @@ sequenceDiagram
 
     Bidder->>API: Submit bid
     API->>Service: Validate request
-    Service->>DB: Read auction and current version
-    Service->>Service: Validate bid and auction state
-    Service->>DB: Persist bid and update auction
+    Service->>DB: Read auction state
+    Service->>Service: Validate bid
+    Service->>DB: Save bid and update auction
     alt Update succeeds
-        DB-->>Service: Update committed
+        DB-->>Service: Update successful
         Service-->>API: Bid result
         API-->>Bidder: Success response
     else Concurrent update conflict
         DB-->>Service: Version conflict
         Service-->>API: Conflict handling result
-        API-->>Bidder: Failure or retry result
+        API-->>Bidder: Result
     end
 ```
 
-*The diagram illustrates the intended bidding flow. Exact retry behavior and transaction boundaries depend on the implementation.*
+*The diagram illustrates the conceptual workflow. Exact transaction boundaries and retry behavior depend on the implementation.*
 
 ## 🔌 API Reference
 
 **Base URL:** `http://localhost:8080`
 
+Protected endpoints require a valid JWT unless otherwise configured in the application security settings.
+
 ### Authentication
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/auth/register` | Register a user |
 | `POST` | `/api/auth/login` | Authenticate a user |
 
 ### Auctions and Bids
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/auctions` | List auctions |
-| `GET` | `/api/auctions/{id}` | Get auction details |
+| `GET` | `/api/auctions` | Retrieve auctions |
+| `GET` | `/api/auctions/{id}` | Retrieve auction details |
 | `POST` | `/api/auctions` | Create an auction |
 | `POST` | `/api/auctions/{auctionId}/bids` | Place a bid |
 | `GET` | `/api/auctions/{auctionId}/bids` | Retrieve bid history |
 
 ### Automatic Bidding
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/auctions/{auctionId}/auto-bid` | Configure automatic bidding |
 | `DELETE` | `/api/auctions/{auctionId}/auto-bid` | Deactivate automatic bidding |
 
 ### Notifications
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/users/me/notifications` | Retrieve notifications for the authenticated user |
 
 <details>
-<summary><strong>📨 Example: Place a Bid</strong></summary>
-
-**Request**
-
-```http
-POST /api/auctions/9/bids
-Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json
-```
-
-Use the bid request JSON expected by your application's request DTO.
-
-**Expected workflow**
-
-1. Authenticate and obtain a JWT.
-2. Select an auction that is accepting bids.
-3. Submit a valid bid using the authenticated user's token.
-4. Verify the result using the auction details and bid-history endpoints.
-
-</details>
-
-<details>
-<summary><strong>🤖 Example: Configure Automatic Bidding</strong></summary>
+<summary><strong>📨 Example: Configure Automatic Bidding</strong></summary>
 
 **Request**
 
@@ -226,7 +207,7 @@ Content-Type: application/json
 }
 ```
 
-The maximum amount represents the user's configured automatic bidding limit. The actual bidding rules depend on the auction and service implementation.
+Replace the example auction ID and token with valid values from your local application. The maximum amount is the user's configured automatic bidding limit.
 
 </details>
 
@@ -240,56 +221,85 @@ GET /api/users/me/notifications
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-The endpoint retrieves notifications for the authenticated user rather than accepting an arbitrary user ID in the URL.
+This endpoint retrieves notifications for the authenticated user.
 
 </details>
+
+> **Note:** For exact bid creation, auction creation, registration, and login request examples, refer to the request DTOs in the source code. Use the fields defined by the application rather than assuming a generic request format.
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
+Install the following before running the application:
+
 - Java Development Kit (JDK) 21
 - MySQL Server
-- IntelliJ IDEA or another Java IDE
 - Git
-- Postman (for API testing)
+- IntelliJ IDEA or another Java IDE
+- Postman for API testing
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/sujithakrishna/livebid-auction-system.git
-cd livebid-auction-system
+git clone https://github.com/sujithakrishna/livebid-springboot-auction-system.git
+cd livebid-springboot-auction-system
 ```
 
 ### 2. Create the Database
 
-Open MySQL Workbench or your MySQL client and execute:
+Open MySQL Workbench or your preferred MySQL client and execute:
 
 ```sql
 CREATE DATABASE livebid_db;
 ```
 
-Ensure the database tables are created using the project's entity mappings or database initialization configuration.
+The application must be configured to connect to this database. Ensure the required tables are created through the project's entity mappings or database initialization configuration.
 
-### 3. Configure Database Credentials
+### 3. Configure Environment Variables
 
-Update the database configuration in your application's configuration file.
+The application configuration uses environment variables for database credentials and the JWT signing secret.
 
-Example for `application.properties`:
+| Variable | Purpose |
+|---|---|
+| `DB_URL` | MySQL JDBC connection URL |
+| `DB_USERNAME` | MySQL username |
+| `DB_PASSWORD` | MySQL password |
+| `JWT_SECRET` | JWT signing secret |
 
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/livebid_db
-spring.datasource.username=${DB_USERNAME}
-spring.datasource.password=${DB_PASSWORD}
+Example values for a local development environment:
+
+```text
+DB_URL=jdbc:mysql://localhost:3306/livebid_db
+DB_USERNAME=your_mysql_username
+DB_PASSWORD=your_mysql_password
+JWT_SECRET=your_generated_secret
 ```
 
-Configure the remaining application properties according to your project.
+Set these as environment variables on your machine or in your IDE's run configuration. The example values above are placeholders, not literal credentials.
 
-**Security:** Keep database credentials, JWT secrets, and other private configuration out of GitHub. Use environment variables or a local, Git-ignored configuration file.
+**Security guidelines**
+
+- Never commit real passwords or JWT signing secrets.
+- Do not publish a `.env` file containing credentials.
+- Use a strong, randomly generated JWT secret.
+- Rotate any secret that has been exposed.
 
 ### 4. Run the Application
 
-Open the project in your IDE, ensure the required dependencies are resolved, and run the Spring Boot application.
+Open the cloned project in IntelliJ IDEA and allow Maven to resolve its dependencies.
+
+You can run the main application class:
+
+```text
+com.sujitha.livebidspringboot.LivebidSpringbootApplication
+```
+
+Alternatively, on Windows PowerShell, run the Maven wrapper:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
 
 The default local API base URL is:
 
@@ -297,18 +307,24 @@ The default local API base URL is:
 http://localhost:8080
 ```
 
-### 5. Test Using Postman
+### 5. Test with Postman
 
 1. Register a user.
 2. Log in and obtain a JWT.
-3. Add the token as a Bearer Token for protected endpoints.
+3. Set the token as a Bearer Token for protected requests.
 4. Create or select an auction.
-5. Place bids and inspect the bid history.
-6. Test automatic bidding and notifications.
+5. Place bids and inspect the auction's bid history.
+6. Test automatic bidding.
+7. Retrieve notifications for the authenticated user.
+8. Verify auction lifecycle transitions.
 
-## 🧪 Testing Checklist
+## 🧪 Testing
 
-Use this checklist as a guide when verifying the application.
+The repository includes Java test source files under `src/test`.
+
+### Recommended Verification Checklist
+
+Use this checklist to track testing as you verify each scenario.
 
 - [ ] User registration and login
 - [ ] JWT authentication for protected endpoints
@@ -321,38 +337,52 @@ Use this checklist as a guide when verifying the application.
 - [ ] User-specific notification retrieval
 - [ ] Scheduled auction transitions and winner notifications
 
+Only mark a scenario as complete after confirming its result.
+
 ## 📂 Project Structure
 
-The project follows a Spring Boot application structure. The exact package and class names should be verified against the repository.
-
 ```text
-livebid-auction-system/
+livebid-springboot-auction-system/
+├── .mvn/
 ├── src/
 │   ├── main/
-│   │   ├── java/
-│   │   │   └── com/sujitha/livebidspringboot/
+│   │   ├── java/com/sujitha/livebidspringboot/
+│   │   │   ├── config/
+│   │   │   ├── controller/
+│   │   │   ├── dao/
+│   │   │   ├── dto/
+│   │   │   ├── exception/
+│   │   │   ├── model/
+│   │   │   ├── security/
+│   │   │   ├── service/
+│   │   │   └── LivebidSpringbootApplication.java
 │   │   └── resources/
-│   └── test/
+│   │       └── application.properties
+│   └── test/java/com/sujitha/livebidspringboot/
+├── .gitignore
+├── mvnw
+├── mvnw.cmd
 ├── pom.xml
 └── README.md
 ```
 
 ## 💡 Engineering Highlights
 
-- **Concurrency control:** Optimistic locking helps detect competing updates to an auction.
-- **Authentication:** JWT provides an authenticated identity for protected API requests.
-- **Automated workflows:** Scheduled processing manages auction state transitions.
+- **Concurrency control:** Optimistic locking helps detect conflicting updates to an auction.
+- **Authentication:** JWT-based authentication protects restricted API operations.
+- **Password security:** BCrypt is used to hash passwords.
 - **Automated bidding:** User-defined limits support automatic bid placement.
-- **Data isolation:** The notification API scopes results to the authenticated user.
+- **Scheduled processing:** Auction lifecycle transitions are handled by a scheduled service.
+- **User-specific notifications:** Notification retrieval is scoped to the authenticated user.
 
 ## 🛣️ Future Improvements
 
-- Add a dedicated automated test suite for bidding and concurrency.
-- Add integration tests for authentication, authorization, and auction lifecycle transitions.
-- Document request and response schemas for every endpoint.
+- Expand automated unit and integration test coverage.
 - Add API documentation using OpenAPI/Swagger if configured.
-- Add deployment instructions and production monitoring.
+- Add deployment instructions and production environment configuration.
+- Add structured logging and monitoring.
 - Add a frontend for bidders and auction administrators.
+- Add real-time bid updates through a WebSocket client if supported by the application.
 
 ## 👩‍💻 Author
 
@@ -364,5 +394,5 @@ livebid-auction-system/
 ---
 
 <p align="center">
-  <strong>LiveBid — Building reliable bidding workflows with Java.</strong>
+  <strong>LiveBid — Building reliable bidding workflows with Java and Spring Boot.</strong>
 </p>
